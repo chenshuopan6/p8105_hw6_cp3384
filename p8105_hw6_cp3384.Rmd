@@ -91,5 +91,53 @@ result_summary %>%
 
 # Question2
 
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31")%>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10)%>%
+  select(name, id, everything())
+```
+
+**The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:**
+
+```{r}
+r_square <-
+  weather_df %>%
+  modelr::bootstrap(n = 5000)%>%
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    glance = map(models, broom::glance)
+    )%>%
+  select(-strap,-models)%>%
+  unnest(glance)%>%
+  summarize(
+            Lower = quantile(r.squared, 0.025),
+            Upper = quantile(r.squared, 0.975))
+  
+
+```
+
+```{r}
+log_beta <-
+  weather_df %>%
+  modelr::bootstrap(n = 5000)%>%
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::tidy)
+    )%>%
+  select(-strap,-models)%>%
+  unnest(results)%>%
+  filter(term != "(Intercept)")%>%
+  group_by(.id)%>%
+  summarize(beta_hat = prod(estimate))
+```
+
 
 
