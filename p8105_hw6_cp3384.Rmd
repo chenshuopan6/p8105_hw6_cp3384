@@ -2,7 +2,7 @@
 title: "p8105_hw6_cp3384"
 author: "Chenshuo Pan"
 date: "`r Sys.Date()`"
-output: html_document
+output: github_document
 ---
 
 ```{r}
@@ -138,6 +138,107 @@ log_beta <-
   group_by(.id)%>%
   summarize(beta_hat = prod(estimate))
 ```
+
+# Question3
+
+**Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).**
+
+```{r}
+birthweight <- read_csv("data/birthweight.csv")%>%
+  janitor::clean_names()%>%
+  mutate(babysex = case_when(babysex == 1 ~ "male",
+                             TRUE ~ "female"),
+         
+         frace = case_when(frace == 1 ~ "White",
+                           frace == 2 ~ "Black",
+                           frace == 3 ~ "Asian",
+                           frace == 4 ~ "Puerto Rican",
+                           frace == 8 ~ "Other",
+                           frace == 9 ~ "Unknown"),
+         
+         malform = case_when(malform == 0 ~ "absent",
+                             TRUE ~ "present"),
+         
+         mrace = case_when(mrace == 1 ~ "White",
+                           mrace == 2 ~ "Black",
+                           mrace == 3 ~ "Asian",
+                           mrace == 4 ~ "Puerto Rican",
+                           mrace == 8 ~ "Other"))%>%
+  mutate(frace = fct_infreq(frace),
+         mrace = fct_infreq(mrace))
+         
+```
+
+**Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.**
+
+```{r}
+hypo_model = lm(bwt~ ., data = birthweight)
+
+bothward_model <- step(hypo_model, direction = "both",trace = 0)
+summary(bothward_model)
+```
+
+I only keep those very significant predictors 
+
+```{r}
+proposed_model = lm(bwt ~  babysex + blength + delwt + gaweeks + mheight + mrace + ppwt +smoken, data = birthweight)
+
+summary(proposed_model)
+```
+
+```{r}
+birthweight%>%
+  add_predictions(proposed_model)%>%
+  add_residuals(proposed_model)%>%
+  ggplot(aes(x = pred, y = resid))+
+  geom_point()+
+  stat_smooth(method = "lm", se = FALSE)
+```
+
+
+**Compare your model to two others:One using length at birth and gestational age as predictors (main effects only),One using head circumference, length, sex, and all interactions (including the three-way interaction) between these Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
+
+
+```{r}
+main_model <-lm(bwt ~ blength +gaweeks, data = birthweight)
+
+inter_model <-lm(bwt ~ bhead + blength +babysex + babysex*bhead*blength, data = birthweight)
+```
+
+```{r}
+cv_df = 
+  crossv_mc(birthweight, 100) %>%
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df %>%
+  mutate(
+    proposed_mod  = map(train, ~proposed_model),
+    main_mod  = map(train, ~main_model),
+    inter_mod  = map(train, ~inter_model))%>%
+  mutate(
+    rmse_proposed = map2_dbl(proposed_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_main = map2_dbl(main_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_inter = map2_dbl(inter_mod, test, \(mod, df) rmse(model = mod, data = df)))
+
+
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+
+
+
+
 
 
 
