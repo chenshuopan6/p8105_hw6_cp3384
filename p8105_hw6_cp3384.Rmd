@@ -107,37 +107,70 @@ weather_df =
 
 **The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:**
 
-```{r}
-r_square <-
+
+
+```{r,warning=FALSE}
+weather_model <-
   weather_df %>%
   modelr::bootstrap(n = 5000)%>%
   mutate(
     models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::tidy),
     glance = map(models, broom::glance)
     )%>%
-  select(-strap,-models)%>%
-  unnest(glance)%>%
-  summarize(
-            Lower = quantile(r.squared, 0.025),
-            Upper = quantile(r.squared, 0.975))
-  
+  select(-strap,-models)
 
-```
 
-```{r}
-log_beta <-
-  weather_df %>%
-  modelr::bootstrap(n = 5000)%>%
-  mutate(
-    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
-    results = map(models, broom::tidy)
-    )%>%
-  select(-strap,-models)%>%
+log_beta_product <-
+  weather_model%>%
   unnest(results)%>%
   filter(term != "(Intercept)")%>%
   group_by(.id)%>%
-  summarize(beta_hat = prod(estimate))
+  summarize(beta_hat = prod(estimate))%>%
+  mutate(logbeta = log(beta_hat))
+
+
+model_rsquare <-
+  weather_model%>%
+  unnest(glance)%>%
+  select(.id,r.squared)
+  
 ```
+
+
+```{r}
+log_beta_product_rmNA <- na.omit(log_beta_product)
+
+beta_R2_rmNA <- left_join(log_beta_product_rmNA,model_rsquare,by = ".id")
+```
+
+```{r}
+beta_R2_rmNA%>%
+  ggplot(aes(x = logbeta))+
+  geom_density()
+```
+
+
+```{r}
+beta_R2_rmNA%>%
+  ggplot(aes(x = r.squared))+
+  geom_density()
+```
+
+
+
+```{r}
+model_rsquare%>%
+  ggplot(aes(x = r.squared))+
+  geom_density()
+```
+
+
+
+
+
+
+
 
 # Question3
 
