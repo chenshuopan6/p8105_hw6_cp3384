@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: github_document
 ---
 
-```{r}
+```{r,include=FALSE}
 library(tidyverse)
 library(ggplot2)
 library(modelr)
@@ -18,7 +18,7 @@ library(mgcv)
 **Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.**
 
 
-```{r}
+```{r,warning=FALSE}
 #homicides_data<-read_csv('https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv')
 
 homicides_data<-read_csv('data/homicide-data.csv')
@@ -110,6 +110,8 @@ weather_df =
 
 
 ```{r,warning=FALSE}
+
+#Conduct a bootstrap with a frequency of 5000, and perform regression for each experiment to obtain the parameter coefficients and R square
 weather_model <-
   weather_df %>%
   modelr::bootstrap(n = 5000)%>%
@@ -144,28 +146,54 @@ log_beta_product_rmNA <- na.omit(log_beta_product)
 beta_R2_rmNA <- left_join(log_beta_product_rmNA,model_rsquare,by = ".id")
 ```
 
+
+```{r}
+quantile(pull(beta_R2_rmNA,logbeta),prob = c(0.025, 0.975),na.rm = TRUE)%>%
+  knitr::kable()
+```
+
+```{r}
+quantile(pull(beta_R2_rmNA,r.squared),prob = c(0.025, 0.975),na.rm = TRUE)%>%
+  knitr::kable()
+```
+
+
+```{r}
+quantile(pull(model_rsquare,r.squared),prob = c(0.025, 0.975),na.rm = TRUE)%>%
+  knitr::kable()
+```
+
 ```{r}
 beta_R2_rmNA%>%
   ggplot(aes(x = logbeta))+
-  geom_density()
+  geom_density()+
+  labs(x = "log(β1 * β2)",
+       title = "Density plot for log(β1 * β2) after NA removed")
 ```
+
+As can be seen from the shape of the density plot, there is a longer tail on the left, which proves that there may be outliers and skewed. At the same time, 95% of the intervals also prove this. The most densely distributed area is around -5.5，
+
 
 
 ```{r}
 beta_R2_rmNA%>%
   ggplot(aes(x = r.squared))+
-  geom_density()
+  geom_density()+
+  labs(x = "R Squared",
+       title = "Density plot for R squared after NA removed")
 ```
 
-
+Compared with the image of log(beta), the distribution of R Squared is more approximately normal and has no obvious skewness. From the X-axis scale, basically all results are acceptable for the R2 standard, which means that the model we use is appropriate.
 
 ```{r}
 model_rsquare%>%
   ggplot(aes(x = r.squared))+
-  geom_density()
+  geom_density()+
+  labs(x = "R squared",
+       title = "Density plot for R squared without any data deletion")
 ```
 
-
+Compared with the previous picture: R2 with NA data removed. The two pictures are similar in shape, but the overall graph has moved to the right. This can also be seen from the 95% interval we constructed. The 97.5% value without processing is greater than the 97.5% value with NA removed.
 
 
 
@@ -210,8 +238,7 @@ hypo_model = lm(bwt~ ., data = birthweight)
 bothward_model <- step(hypo_model, direction = "both",trace = 0)
 summary(bothward_model)
 ```
-
-I only keep those very significant predictors 
+I use Stepwise Regression to help me get a model. on the basis of,I only keep those very significant predictors 
 
 ```{r}
 proposed_model = lm(bwt ~  babysex + blength + delwt + gaweeks + mheight + mrace + ppwt +smoken, data = birthweight)
@@ -225,8 +252,11 @@ birthweight%>%
   add_residuals(proposed_model)%>%
   ggplot(aes(x = pred, y = resid))+
   geom_point()+
-  stat_smooth(method = "lm", se = FALSE)
+  stat_smooth(method = "lm")
 ```
+
+As you can see, my fitted curve `smooth()` basically floats around 0, which proves that there is no obvious pattern for different predicted values. So from this perspective, the model I proposed has better fitting ability
+
 
 
 **Compare your model to two others:One using length at birth and gestational age as predictors (main effects only),One using head circumference, length, sex, and all interactions (including the three-way interaction) between these Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
@@ -265,11 +295,14 @@ cv_df %>%
     values_to = "rmse",
     names_prefix = "rmse_") %>% 
   mutate(model = fct_inorder(model)) %>% 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse)) + geom_violin()+
+  labs(title =" violin plot of distribution of RMSE values for each candidate model. ")
 ```
 
 
+The plot above shows the distribution of RMSE values for each candidate model.
 
+By comparing the three models, the Intersection model has the smallest RMSE distribution, which proves that the RMSE model performs best in this data set among the three models, and the main model with only main effects performs the worst, which may be too simple.
 
 
 
